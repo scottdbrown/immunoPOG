@@ -385,7 +385,7 @@ if __name__ == "__main__":
 
                 hgvs = line[12]
                 #if hgvs != "NA":
-                if "NA" not in hgvs:
+                if "NA" not in hgvs and "splice" not in line[7]:
                     mutPeptide = "temp" ## this may get set to None later on if deemed not able to be predicted.
                     ## hgvs_cds = c.#[_#][del/dup/ins]*
                     hgvs = hgvs[2:] ## remove leading "c."
