@@ -423,7 +423,14 @@ if __name__ == "__main__":
                     indelStartPos = int(pos[0])
                     
                     if len(pos) > 1:
-                        indelEndPos = int(pos[1])
+                        if "*" in pos[1]:
+                            ## affects the stop codon
+                            if "del" in hgvs:
+                                indelEndPos = indelStartPos + len(seq)
+                            else:
+                                indelEndPos = indelStartPos + 1
+                        else:
+                            indelEndPos = int(pos[1])
                     else:
                         indelEndPos = indelStartPos
 
