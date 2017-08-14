@@ -34,6 +34,9 @@ enst2ensp = {}
 MIN_PEPTIDE_LEN = 8
 MAX_PEPTIDE_LEN = 11
 
+numMutationsSkipped = 0
+numMutationsComplete = 0
+
 
 ## since ensp reference sequences may contain *
 def processProtRefWithStop(protseq):
@@ -97,7 +100,7 @@ def getORFandStart(sequence, protseq, geneName):
         if not protein_best.endswith(protseq[0]):
             if DEBUG: print("Reference transcript is: {}".format(sequence))
             if DEBUG: print("Reference protein sequence is: {}".format(protseq))
-            print("No ORF ends with the provided reference protein sequence for {}. SKIPPING.".format(geneName))
+            print("Warning: No ORF ends with the provided reference protein sequence for {}. SKIPPING.".format(geneName))
             return [None, None]
 
         else:
@@ -142,7 +145,7 @@ def getORFandStart(sequence, protseq, geneName):
         if not protein_best.endswith(protseq):
             if DEBUG: print("Reference transcript is: {}".format(sequence))
             if DEBUG: print("Reference protein sequence is: {}".format(protseq))
-            print("No ORF ends with the provided reference protein sequence for {}. SKIPPING.".format(geneName))
+            print("Warning: No ORF ends with the provided reference protein sequence for {}. SKIPPING.".format(geneName))
             return [None, None]
 
         else:
@@ -259,6 +262,7 @@ if __name__ == "__main__":
 
                     if not ensp_seq.startswith("M"):
                         print("Warning: Reference protein sequence for {} ({}) does not start with 'M'. SKIPPING".format(enst, hugo))
+                        numMutationsSkipped += 1
                         VALID = False
 
                     ## if "*" in ensp_seq, extract the longest sequence
@@ -268,6 +272,7 @@ if __name__ == "__main__":
                         if len(ensp_seq) == 0:
                             ## no appropriate sequence
                             print("Warning: Reference protein sequence for {} ({}) contains '*', and no segment starts with 'M'. SKIPPING".format(enst, hugo))
+                            numMutationsSkipped += 1
                             VALID = False
 
                     if VALID:
@@ -288,6 +293,7 @@ if __name__ == "__main__":
                         if not refSeq.startswith("ATG"):
                             print('Warning: Reference sequence for {} ({}) starting at position {} (based on reference protein matching ORF) does not start with a start codon.'.format(enst, hugo, orfPos))
                             noStartStart = True
+                            numMutationsSkipped += 1
                             print("SKIPPING")
 
                         ## Move this outside the else if non-Start codon starts are fine to include.
@@ -297,6 +303,7 @@ if __name__ == "__main__":
                             if ref != transRefNuc:
                                 print("Warning: Reference allele does not match reference sequence: {}: {}/{}".format(enst, ref, transRefNuc))
                                 print(line)
+                                numMutationsSkipped += 1
                                 print("SKIPPING")
                             else:
 
@@ -370,6 +377,7 @@ if __name__ == "__main__":
 
                                     if len(refPeptide) < MIN_PEPTIDE_LEN or len(mutPeptide) < MIN_PEPTIDE_LEN:
                                         print("Warning: Variant {} does not fall within the coding sequence of {}. SKIPPING".format(hgvs, enst))
+                                        numMutationsSkipped += 1
                                         print("refProtein: {}\nrefProtein length: {}\nmutProtein: {}".format(refProtein, len(refProtein), mutProtein))
                                         print("Expected protein mutation: {}".format(aaChange))
                                     
@@ -442,6 +450,7 @@ if __name__ == "__main__":
 
                     if indelStartPos < 1:
                         print("WARNING: INDEL {} is (at least partially) positioned upstream of start codon. SKIPPING".format(hgvs))
+                        numMutationsSkipped += 1
                     else:
 
                         enst = line[15]
@@ -455,6 +464,7 @@ if __name__ == "__main__":
 
                         if not ensp_seq.startswith("M"):
                             print("Warning: Reference protein sequence for {} ({}) does not start with 'M'. SKIPPING".format(enst, hugo))
+                            numMutationsSkipped += 1
                             VALID = False
 
                         ## if "*" in ensp_seq, extract the longest sequence
@@ -464,6 +474,7 @@ if __name__ == "__main__":
                             if len(ensp_seq) == 0:
                                 ## no appropriate sequence
                                 print("Warning: Reference protein sequence for {} ({}) contains '*', and no segment starts with 'M'. SKIPPING".format(enst, hugo))
+                                numMutationsSkipped += 1
                                 VALID = False
 
                         if VALID:
@@ -480,17 +491,21 @@ if __name__ == "__main__":
                             if "del" in hgvs:
                                 if not refSeq[indelStartPos-1:].startswith(seq):
                                     print("Warning: deletion sequence does not match reference! SKIPPING")
+                                    numMutationsSkipped += 1
                                     mutPeptide = None
                             if "dup" in hgvs:
                                 if not refSeq[dupStartPos-1:].startswith(seq):
                                     print("Warning: duplication base does not match reference! SKIPPING")
+                                    numMutationsSkipped += 1
                                     mutPeptide = None
 
                             ## I think this if/elif is redundant now. Should be handled above.
                             if not ensp_seq.startswith("M"):
                                 print("Warning: Reference protein sequence for {} ({}) does not start with 'M'. SKIPPING".format(enst, hugo))
+                                numMutationsSkipped += 1
                             elif not refSeq.startswith("ATG"):
                                 print('Warning: Reference sequence for {} ({}) starting at position {} (based on longest ORF) does not start with a start codon.'.format(enst, hugo, orfPos))
+                                numMutationsSkipped += 1
                                 #print("enst_seq: {}".format(enst_seq))
                                 #print("ensp_seq: {}".format(ensp_seq))
                                 #print("refSeq: {}".format(refSeq))
@@ -520,12 +535,15 @@ if __name__ == "__main__":
                                     
                                 if not mutSeq.startswith("ATG"):
                                     print("Warning: Start codon broken by mutation: {}. SKIPPING".format(hgvs))
+                                    numMutationsSkipped += 1
                                     mutPeptide = None
                                 if len(refSeq)%3 != len(mutSeq)%3 and "frameshift" not in line[7]:
                                     print("Warning: Applying indel caused frameshift, but indel not classified as frameshift: {} - {}. SKIPPING".format(hgvs, line[7]))
+                                    numMutationsSkipped += 1
                                     mutPeptide = None
                                 if len(refSeq)%3 == len(mutSeq)%3 and "inframe" not in line[7]:
                                     print("Warning: Applying indel did not cause frameshift, but indel classified as frameshift: {} - {}. SKIPPING".format(hgvs, line[7]))
+                                    numMutationsSkipped += 1
                                     mutPeptide = None
 
                                 while len(mutSeq) % 3 != 0:
@@ -565,6 +583,7 @@ if __name__ == "__main__":
                                             firstIndelCodon = math.floor((indelStartPos+2)/3)
                                             if firstIndelCodon < 1:
                                                 print("Warning: INDEL begins 5' of coding sequence. SKIPPING")
+                                                numMutationsSkipped += 1
                                                 mutPeptide = None
                                             else:
                                                 lastIndelCodon = math.floor((indelEndPos+2)/3)
@@ -598,6 +617,7 @@ if __name__ == "__main__":
                                                 ## (if mutation generates a stop codon at the mutation site, peptide will end before the pepVarPos)
                                                 if pepVarPos > len(mutPeptide):
                                                     ## outside, skip this one.
+                                                    numMutationsSkipped += 1
                                                     mutPeptide = None
 
                                                 refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
@@ -620,6 +640,7 @@ if __name__ == "__main__":
                                             firstIndelCodon = math.floor((indelStartPos+2)/3)
                                             if firstIndelCodon < 1:
                                                 print("Warning: INDEL begins 5' of coding sequence. SKIPPING")
+                                                numMutationsSkipped += 1
                                                 mutPeptide = None
                                             else:
                                                 lastIndelCodon = math.floor((indelEndPos+2)/3)
@@ -649,6 +670,7 @@ if __name__ == "__main__":
                                                 ## (if mutation generates a stop codon at the mutation site, peptide will end before the pepVarPos)
                                                 if pepVarPos > len(mutPeptide):
                                                     ## outside, skip this one.
+                                                    numMutationsSkipped += 1
                                                     mutPeptide = None
 
                                                 refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
@@ -675,6 +697,7 @@ if __name__ == "__main__":
                                             firstIndelCodon = math.ceil((indelStartPos+2)/3)
                                             if firstIndelCodon < 1:
                                                 print("Warning: INDEL begins 5' of coding sequence. SKIPPING")
+                                                numMutationsSkipped += 1
                                                 mutPeptide = None
                                             else:
                                                 lastIndelCodon = firstIndelCodon + int(len(seq)/3) - 1 ## first codon plus number of amino acids added - 1
@@ -707,6 +730,7 @@ if __name__ == "__main__":
                                                 ## (if mutation generates a stop codon at the mutation site, peptide will end before the pepVarPos)
                                                 if pepVarPosLeft > len(mutPeptide):
                                                     ## outside, skip this one.
+                                                    numMutationsSkipped += 1
                                                     mutPeptide = None
 
                                                 refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
@@ -729,6 +753,7 @@ if __name__ == "__main__":
                                             firstIndelCodon = math.floor((indelStartPos+2)/3)
                                             if firstIndelCodon < 1:
                                                 print("Warning: INDEL begins 5' of coding sequence. SKIPPING")
+                                                numMutationsSkipped += 1
                                                 mutPeptide = None
                                             else:
                                                 #lastIndelCodon = firstIndelCodon + int(len(seq)/3) - 1 ## first codon plus number of amino acids added - 1
@@ -762,6 +787,7 @@ if __name__ == "__main__":
                                                 ## (if mutation generates a stop codon at the mutation site, peptide will end before the pepVarPos)
                                                 if pepVarPosLeft > len(mutPeptide):
                                                     ## outside, skip this one.
+                                                    numMutationsSkipped += 1
                                                     mutPeptide = None
 
                                                 refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
@@ -790,6 +816,7 @@ if __name__ == "__main__":
                                         firstIndelCodon = math.floor((indelStartPos+2)/3)
                                         if firstIndelCodon < 1:
                                             print("Warning: INDEL begins 5' of coding sequence. SKIPPING")
+                                            numMutationsSkipped += 1
                                             mutPeptide = None
                                         else:
                                             varPos = firstIndelCodon
@@ -816,6 +843,7 @@ if __name__ == "__main__":
                                             ## (if mutation generates a stop codon at the mutation site, peptide will end before the pepVarPos)
                                             if pepVarPos > len(mutPeptide):
                                                 ## outside, skip this one.
+                                                numMutationsSkipped += 1
                                                 mutPeptide = None
 
                                             pepVarPos = "{}-*".format(pepVarPos)
@@ -838,6 +866,7 @@ if __name__ == "__main__":
                                         firstIndelCodon = math.ceil((indelStartPos+2)/3)
                                         if firstIndelCodon < 1:
                                             print("Warning: INDEL begins 5' of coding sequence. SKIPPING")
+                                            numMutationsSkipped += 1
                                             mutPeptide = None
                                         else:
                                             varPosLeft = firstIndelCodon
@@ -867,6 +896,7 @@ if __name__ == "__main__":
                                             ## (if mutation generates a stop codon at the mutation site, peptide will end before the pepVarPos)
                                             if pepVarPosLeft > len(mutPeptide):
                                                 ## outside, skip this one.
+                                                numMutationsSkipped += 1
                                                 mutPeptide = None
 
                                             refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
@@ -940,6 +970,7 @@ if __name__ == "__main__":
         out = open(os.path.join(args.workingDir, tum, "peptides.fa"), "w")
         toWrite = ""
         for k in peps[tum]:
+            numMutationsComplete += 1
             toWrite += ">{}\n{}\n".format(k, peps[tum][k])
         out.write(toWrite)
         out.close()
@@ -957,5 +988,8 @@ if __name__ == "__main__":
         for k in pepsInfo[tum]:
             idsfile.write("{}\t{}\t{}".format(tum,k,pepsInfo[tum][k]))
     idsfile.close()
+
+    print("Number of mutations skipped: {}".format(numMutationsSkipped))
+    print("Number of mutations processed successfully: {}".format(numMutationsComplete))
 
     print("done.")
