@@ -57,9 +57,18 @@ def getORFandStart(sequence, protseq, geneName):
 
     startPos_best = 0
     protein_best = ""
+    upos = []
     
     if "U" in protseq:
-        protseq = protseq.split("U")
+        protseqArray = protseq.split("U")
+
+        ## get positions of Us
+        upos.append(len(protseqArray[0] + 1))
+        for i in range(1,len(protseqArray)):
+            ## if that was not the last U
+            if upos[i-1] + len(protseqArray[i]) + 1 < len(protseq):
+                upos.append(upos[i-1] + len(protseqArray[i]) + 1)
+
     
         ## For sequence[0:], sequence[1:], sequence[2:] (three different reading frames)
         for i in range(0,3):
@@ -80,12 +89,12 @@ def getORFandStart(sequence, protseq, geneName):
             protArray = prot.split("*")
             for j in range(0,len(protArray)):
                 p = protArray[j]
-                if p.endswith(protseq[0]):
+                if p.endswith(protseqArray[0]):
                     allChunksMatch = True
-                    for k in range(1,len(protseq)):
-                        if len(protseq[k]) > 0 and protseq[k] == protArray[j+k]:
+                    for k in range(1,len(protseqArray)):
+                        if len(protseqArray[k]) > 0 and protseqArray[k] == protArray[j+k]:
                             allChunksMatch = allChunksMatch and True
-                        elif len(protseq[k]) > 0:
+                        elif len(protseqArray[k]) > 0:
                             ## then there is a mismatch
                             allChunksMatch = False
 
@@ -97,16 +106,16 @@ def getORFandStart(sequence, protseq, geneName):
                 curPos += 3*len(p) + 3 #plus 3 for the stop codon
 
         ## Return the position of the longest.
-        if not protein_best.endswith(protseq[0]):
+        if not protein_best.endswith(protseqArray[0]):
             if DEBUG: print("Reference transcript is: {}".format(sequence))
             if DEBUG: print("Reference protein sequence is: {}".format(protseq))
             print("Warning: No ORF ends with the provided reference protein sequence for {}. SKIPPING.".format(geneName))
             return [None, None]
 
         else:
-            ## if protSeq shorter than protein_best, shift the start position up to the start of the protein.
-            startPos_best += 3*(len(protein_best) - len(protseq[0]))
-            endPos_best = startPos_best + 3*len("U".join(protseq))
+            ## if protseq shorter than protein_best, shift the start position up to the start of the protein.
+            startPos_best += 3*(len(protein_best) - len(protseqArray[0]))
+            #endPos_best = startPos_best + 3*len("U".join(protseqArray))
 
     else:
         ## For sequence[0:], sequence[1:], sequence[2:] (three different reading frames)
@@ -151,10 +160,39 @@ def getORFandStart(sequence, protseq, geneName):
         else:
             ## if protSeq shorter than protein_best, shift the start position up to the start of the protein.
             startPos_best += 3*(len(protein_best) - len(protseq))
-            endPos_best = startPos_best + 3*len(protseq)
+            #endPos_best = startPos_best + 3*len(protseq)
 
     #if DEBUG: print("startPos_best = {}\nendPos_best = {}".format(startPos_best, endPos_best))
-    return [startPos_best, endPos_best]
+    return [startPos_best, upos]
+
+
+def translateToProtein(refSeq, upos):
+    '''Translates refSeq to protein sequence, and replaces stops with "U" if they should be replaced'''
+
+    prot = ""
+    if len(upos) == 0:
+        ## no Us
+        prot = "".join(Seq(refSeq, generic_rna).translate(to_stop=True))
+    else:
+        protArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False))
+        pind = 0
+        uind = 0
+
+        foundStop = False
+
+        while not foundStop:
+            prot += protArray[pind]
+            pind += 1
+            
+            if len(prot) + 1 == upos[uind]:
+                ## this stop should be a U
+                prot += "U"
+                uind += 1
+            else:
+                ## this should be a stop
+                foundStop = True
+
+    return prot
 
 
 
@@ -278,7 +316,7 @@ if __name__ == "__main__":
                     if VALID:
                         #if DEBUG: print("Getting start codon position for {}, indel {}".format(enst, hgvs))
                         if DEBUG: print("Getting protein position in {}.".format(enst))
-                        orfPos, stopPos = getORFandStart(enst_seq, ensp_seq, "{} ({})".format(enst, hugo))
+                        orfPos, uPos = getORFandStart(enst_seq, ensp_seq, "{} ({})".format(enst, hugo))
 
                     if VALID and orfPos != None:
 
@@ -316,17 +354,7 @@ if __name__ == "__main__":
                                     refSeq += "N"
 
                                 ## refSeq is from start codon onwards.
-                                ## position of stop codon is known. Any stop codons before that point need to be replaced with "U"
-                                refSeqTrans = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                i = 0
-                                refProtein = refSeqTrans[i]
-                                ## while this does not reach the stop codon
-                                while 3*len(refProtein) < stopPos - orfPos:
-                                    ## add subsequent chunks delimited by "U"
-                                    i += 1
-                                    refProtein += "U"
-                                    refProtein += refSeqTrans[i]
+                                refProtein = translateToProtein(refSeq, uPos)
 
 
                                 ## mutate reference cdna
@@ -334,19 +362,16 @@ if __name__ == "__main__":
                                 while len(mutCDNA)%3 != 0:
                                     mutCDNA += "N"
 
+                                ## if mutation affects a Sec codon, remove that U.
+                                if protMutPos in uPos:
+                                    uPos.remove(protMutPos)
+
                                 if mutCDNA.startswith("ATG"):
                                     ## start codon is not broken by mutation
 
                                     ## translate mutant
-                                    mutCDNAtrans = "".join(Seq(mutCDNA, generic_rna).translate(to_stop=False)).split("*")
-
-                                    i = 0
-                                    mutProtein = mutCDNAtrans[i]
-                                    while 3*len(mutProtein) < stopPos - orfPos:
-                                        i += 1
-                                        mutProtein += "U"
-                                        mutProtein += mutCDNAtrans[i]
-
+                                    mutProtein = translateToProtein(mutCDNA, uPos)
+                                    
 
                                     if DEBUG and noStartStart: print("Mutation line: {}".format(line))
                                     if DEBUG and noStartStart: print("Mutation: {}".format(aaChange))
@@ -480,7 +505,7 @@ if __name__ == "__main__":
                         if VALID:
 
                             #if DEBUG: print("Getting start codon position for {}, indel {}".format(enst, hgvs))
-                            orfPos, stopPos = getORFandStart(enst_seq, ensp_seq, "{} ({})".format(enst, hugo))
+                            orfPos, uPos = getORFandStart(enst_seq, ensp_seq, "{} ({})".format(enst, hugo))
 
                         if VALID and orfPos != None:
                         
@@ -515,22 +540,14 @@ if __name__ == "__main__":
                                 ## make the mutation
                                 mutSeq = ""
 
-                                stopPosMut = stopPos
-
                                 if "del" in hgvs:
                                     ## remove the deletion sequence
                                     mutSeq = refSeq[:indelStartPos-1] + refSeq[indelEndPos:]
-
-                                    ## shift the stop codon back
-                                    stopPosMut -= (indelEndPos - indelStartPos + 1)
 
                                 # Converting dup to ins.
                                 elif "ins" in hgvs or "dup" in hgvs:
                                     ## insert the new or duplicated sequence
                                     mutSeq = refSeq[:indelStartPos] + seq + refSeq[indelEndPos-1:]
-
-                                    ## shift the stop codon forward
-                                    stopPosMut += len(seq)
 
                                     
                                 if not mutSeq.startswith("ATG"):
@@ -596,20 +613,20 @@ if __name__ == "__main__":
                                                 pepVarPos = varPos - firstCodon + 1
                                                 
                                                 lastCodon = math.floor(varPos) + MAX_PEPTIDE_LEN - 1
-                                                
+ 
+                                                uPosMut = []
+                                                for i in range(0, len(uPos)):
+                                                    if uPos[i] < firstIndelCodon:
+                                                        ## U codon is not affected
+                                                        uPosMut.append(uPos[i])
+                                                    elif uPos[i] > lastIndelCodon:
+                                                        ## U codon is shifted due to deletion
+                                                        uPosMut.append(uPos[i] - len(seq)/3)
+                                                    #else:
+                                                    ## U is within the indel, and is deleted, do not add.
 
 
-
-                                                mutProteinArray = "".join(Seq(mutSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                                i = 0
-                                                mutProtein = mutProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(mutProtein) < stopPosMut - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    mutProtein += "U"
-                                                    mutProtein += mutProteinArray[i]
+                                                mutProtein = translateToProtein(mutSeq, uPosMut)
 
                                                 mutPeptide = mutProtein[firstCodon-1:lastCodon]
 
@@ -620,18 +637,8 @@ if __name__ == "__main__":
                                                     numMutationsSkipped += 1
                                                     mutPeptide = None
 
-                                                refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                                i = 0
-                                                refProtein = refProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(refProtein) < stopPos - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    refProtein += "U"
-                                                    refProtein += refProteinArray[i]
-                                                #refPeptide = refProtein[firstCodon-1:lastCodon+int((len(seq)+2)/3)]
-
+                                                refProtein = translateToProtein(refSeq, uPos)
+                                                
                                                 aaChange = "del{}_{}".format(firstIndelCodon, lastIndelCodon)
 
                                         else:
@@ -653,16 +660,19 @@ if __name__ == "__main__":
 
                                                 lastCodon = varPos + MAX_PEPTIDE_LEN - 1
 
-                                                mutProteinArray = "".join(Seq(mutSeq, generic_rna).translate(to_stop=False)).split("*")
+                                                uPosMut = []
+                                                for i in range(0, len(uPos)):
+                                                    if uPos[i] < firstIndelCodon:
+                                                        ## U codon is not affected
+                                                        uPosMut.append(uPos[i])
+                                                    elif uPos[i] > lastIndelCodon:
+                                                        ## U codon is shifted due to deletion
+                                                        uPosMut.append(uPos[i] - len(seq)/3)
+                                                    #else:
+                                                    ## U is within the indel, and is deleted, do not add.
 
-                                                i = 0
-                                                mutProtein = mutProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(mutProtein) < stopPosMut - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    mutProtein += "U"
-                                                    mutProtein += mutProteinArray[i]
+
+                                                mutProtein = translateToProtein(mutSeq, uPosMut)
 
                                                 mutPeptide = mutProtein[firstCodon-1:lastCodon]
 
@@ -673,17 +683,8 @@ if __name__ == "__main__":
                                                     numMutationsSkipped += 1
                                                     mutPeptide = None
 
-                                                refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                                i = 0
-                                                refProtein = refProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(refProtein) < stopPos - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    refProtein += "U"
-                                                    refProtein += refProteinArray[i]
-
+                                                refProtein = translateToProtein(refSeq, uPos)
+                                                
                                                 aaChange = "disdel{}_{}".format(firstIndelCodon, lastIndelCodon)
 
 
@@ -713,16 +714,17 @@ if __name__ == "__main__":
                                                 
                                                 lastCodon = varPosRight + MAX_PEPTIDE_LEN - 1
 
-                                                mutProteinArray = "".join(Seq(mutSeq, generic_rna).translate(to_stop=False)).split("*")
+                                                uPosMut = []
+                                                for i in range(0, len(uPos)):
+                                                    if uPos[i] < firstIndelCodon:
+                                                        ## U codon is not affected
+                                                        uPosMut.append(uPos[i])
+                                                    else:
+                                                        ## U codon is shifted due to insertion
+                                                        uPosMut.append(uPos[i] + len(seq)/3)
 
-                                                i = 0
-                                                mutProtein = mutProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(mutProtein) < stopPosMut - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    mutProtein += "U"
-                                                    mutProtein += mutProteinArray[i]
+
+                                                mutProtein = translateToProtein(mutSeq, uPosMut)
 
                                                 mutPeptide = mutProtein[firstCodon-1:lastCodon]
 
@@ -733,17 +735,8 @@ if __name__ == "__main__":
                                                     numMutationsSkipped += 1
                                                     mutPeptide = None
 
-                                                refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                                i = 0
-                                                refProtein = refProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(refProtein) < stopPos - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    refProtein += "U"
-                                                    refProtein += refProteinArray[i]
-
+                                                refProtein = translateToProtein(refSeq, uPos)
+                                                
                                                 aaChange = "ins{}_{}".format(firstIndelCodon, lastIndelCodon)
                                                 pepVarPos = "{}-{}".format(pepVarPosLeft, pepVarPosRight)
 
@@ -769,17 +762,21 @@ if __name__ == "__main__":
                                                 pepVarPosRight = varPosRight - firstCodon + 1
                                                 
                                                 lastCodon = math.floor(varPosRight) + MAX_PEPTIDE_LEN - 1
-                                                
-                                                mutProteinArray = "".join(Seq(mutSeq, generic_rna).translate(to_stop=False)).split("*")
 
-                                                i = 0
-                                                mutProtein = mutProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(mutProtein) < stopPosMut - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    mutProtein += "U"
-                                                    mutProtein += mutProteinArray[i]
+
+                                                uPosMut = []
+                                                for i in range(0, len(uPos)):
+                                                    if uPos[i] < firstIndelCodon:
+                                                        ## U codon is not affected
+                                                        uPosMut.append(uPos[i])
+                                                    elif uPos[i] > firstIndelCodon:
+                                                        ## U codon is shifted due to insertion
+                                                        uPosMut.append(uPos[i] + len(seq)/3)
+                                                    ## implicit else, it is the firstIndelCodon, and thus disrupted and gone.
+
+
+                                                mutProtein = translateToProtein(mutSeq, uPosMut)
+
 
                                                 mutPeptide = mutProtein[firstCodon-1:lastCodon]
 
@@ -790,16 +787,7 @@ if __name__ == "__main__":
                                                     numMutationsSkipped += 1
                                                     mutPeptide = None
 
-                                                refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                                i = 0
-                                                refProtein = refProteinArray[i]
-                                                ## while this does not reach the stop codon
-                                                while 3*len(refProtein) < stopPos - orfPos:
-                                                    ## add subsequent chunks delimited by "U"
-                                                    i += 1
-                                                    refProtein += "U"
-                                                    refProtein += refProteinArray[i]
+                                                refProtein = translateToProtein(refSeq, uPos)
 
                                                 aaChange = "disins{}_{}".format(firstIndelCodon, lastIndelCodon)
                                                 pepVarPos = "{}-{}".format(pepVarPosLeft, pepVarPosRight)
@@ -825,18 +813,18 @@ if __name__ == "__main__":
                                                 firstCodon = 1
                                             
                                             pepVarPos = varPos - firstCodon + 1
+
+                                            uPosMut = []
+                                            for i in range(0, len(uPos)):
+                                                if uPos[i] < firstIndelCodon:
+                                                    ## U codon is not affected
+                                                    uPosMut.append(uPos[i])
+                                                #else:
+                                                ## U is within or after the indel, so is gone due to frameshift.
+
+
+                                            mutProtein = translateToProtein(mutSeq, uPosMut)
                                             
-                                            mutProteinArray = "".join(Seq(mutSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                            i = 0
-                                            mutProtein = mutProteinArray[i]
-                                            ## while this does not reach the first codon affected by the indel (any UGA after indel treated as Stop)
-                                            while len(mutProtein) < firstIndelCodon-1:
-                                                ## add subsequent chunks delimited by "U"
-                                                i += 1
-                                                mutProtein += "U"
-                                                mutProtein += mutProteinArray[i]
-
                                             mutPeptide = mutProtein[firstCodon-1:]
 
                                             ## check that variant site is within peptide
@@ -848,16 +836,7 @@ if __name__ == "__main__":
 
                                             pepVarPos = "{}-*".format(pepVarPos)
 
-                                            refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                            i = 0
-                                            refProtein = refProteinArray[i]
-                                            ## while this does not reach the stop codon
-                                            while 3*len(refProtein) < stopPos - orfPos:
-                                                ## add subsequent chunks delimited by "U"
-                                                i += 1
-                                                refProtein += "U"
-                                                refProtein += refProteinArray[i]
+                                            refProtein = translateToProtein(refSeq, uPos)
 
 
                                     elif "ins" in hgvs or "dup" in hgvs:
@@ -879,17 +858,17 @@ if __name__ == "__main__":
                                             pepVarPosLeft = varPosLeft - firstCodon + 1
                                             pepVarPosRight = "*"
                                             
-                                            mutProteinArray = "".join(Seq(mutSeq, generic_rna).translate(to_stop=False)).split("*")
+                                            uPosMut = []
+                                            for i in range(0, len(uPos)):
+                                                if uPos[i] < firstIndelCodon:
+                                                    ## U codon is not affected
+                                                    uPosMut.append(uPos[i])
+                                                #else:
+                                                ## U is within or after the indel, so is gone due to frameshift.
 
-                                            i = 0
-                                            mutProtein = mutProteinArray[i]
-                                            ## while this does not reach the first codon affected by the indel (any UGA after indel treated as Stop)
-                                            while len(mutProtein) < firstIndelCodon-1:
-                                                ## add subsequent chunks delimited by "U"
-                                                i += 1
-                                                mutProtein += "U"
-                                                mutProtein += mutProteinArray[i]
-                                                
+
+                                            mutProtein = translateToProtein(mutSeq, uPosMut)
+
                                             mutPeptide = mutProtein[firstCodon-1:]
 
                                             ## check that variant site is within peptide
@@ -899,16 +878,7 @@ if __name__ == "__main__":
                                                 numMutationsSkipped += 1
                                                 mutPeptide = None
 
-                                            refProteinArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
-
-                                            i = 0
-                                            refProtein = refProteinArray[i]
-                                            ## while this does not reach the stop codon
-                                            while 3*len(refProtein) < stopPos - orfPos:
-                                                ## add subsequent chunks delimited by "U"
-                                                i += 1
-                                                refProtein += "U"
-                                                refProtein += refProteinArray[i]
+                                            refProtein = translateToProtein(refSeq, uPos)
 
                                             pepVarPos = "{}-{}".format(pepVarPosLeft, pepVarPosRight)
 
