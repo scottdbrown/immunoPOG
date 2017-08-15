@@ -63,7 +63,7 @@ def getORFandStart(sequence, protseq, geneName):
         protseqArray = protseq.split("U")
 
         ## get positions of Us
-        upos.append(len(protseqArray[0] + 1))
+        upos.append(len(protseqArray[0]) + 1)
         for i in range(1,len(protseqArray)):
             ## if that was not the last U
             if upos[i-1] + len(protseqArray[i]) + 1 < len(protseq):
@@ -174,7 +174,7 @@ def translateToProtein(refSeq, upos):
         ## no Us
         prot = "".join(Seq(refSeq, generic_rna).translate(to_stop=True))
     else:
-        protArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False))
+        protArray = "".join(Seq(refSeq, generic_rna).translate(to_stop=False)).split("*")
         pind = 0
         uind = 0
 
@@ -184,7 +184,7 @@ def translateToProtein(refSeq, upos):
             prot += protArray[pind]
             pind += 1
             
-            if len(prot) + 1 == upos[uind]:
+            if uind < len(upos) and len(prot) + 1 == upos[uind]:
                 ## this stop should be a U
                 prot += "U"
                 uind += 1
