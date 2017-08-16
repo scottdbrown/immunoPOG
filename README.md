@@ -49,7 +49,7 @@ If there are multiple result directories for a POG id (from multiple sequence fi
 # Step 4: For each mutation, get the minimal peptide that needs to be submitted to NetMHCpan 3.0
 
 ```shell
-(python3) [sbrown@gphost03 /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170810] 
+(python3) [sbrown@gphost03 /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170815] 
 λ python ../../../scripts/prepPeptideBindingPredictions_SNV_indel.py ../immunoPOG19_toRun.tsv ../../../data/Homo_sapiens.GRCh37.69.cdna.all.fa ../../../data/Homo_sapiens.GRCh37.69.pep.all.fa `pwd`
 ```
 
@@ -66,14 +66,14 @@ Briefly, clusterTAS will create directories on Genesis for each job, and copy ov
 *_Note_*: When running NetMHCpan 3.0 in parallel (multiple executables at once), make sure to specify the argument `-tdir tmpdirXXXXXX` in order to avoid tmpdirs from separate executables from overwriting eachother.
 
 ```shell
-(python3) [sbrown@gphost03 /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170810] 
-λ clusterTAS --genMem 1 --maxJobs 50 --noApollo -c filesToTransfer.fof analysisToRun.sh /genesis/extscratch/sbrown/immunoPOG/ /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170810/results/
+(python3) [sbrown@gphost03 /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170815] 
+λ clusterTAS --genMem 1 --maxJobs 50 --noApollo -c filesToTransfer.fof analysisToRun.sh /genesis/extscratch/sbrown/immunoPOG/ /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170815/results/
 ```
 
 # Step 6: Parsing the results
 
 ```shell
-(python3) [sbrown@gphost03 /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170810] 
+(python3) [sbrown@gphost03 /projects/sbrown_prj/POG/immunoPOG/analysis/mutPepBind/immunoPOG19_170815] 
 λ python ../../../scripts/parseNetMHCpanOutput.py immunoPOG19_pMHC_parsed.tsv --peptideInfoFiles peptideIDs.tsv --result_dirs results/analysis_results/
 ```
 
