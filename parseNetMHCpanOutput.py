@@ -124,7 +124,7 @@ def parseClassI(filename):
 
                         else:
                             ## no frameshift
-                            if mut.split("-")[2].startswith("ins"):
+                            if "ins" in mut.split("-")[2]:
                                 ## in frame insertion
                                 pepVarPos1 = int(varPos.split("-")[0]) - pos + 1
                                 pepVarPos2 = int(varPos.split("-")[1]) - pos + 1
@@ -137,7 +137,7 @@ def parseClassI(filename):
                                         resI[sample][ENST][mut][hla][pos][pepLen] = {}
                                     resI[sample][ENST][mut][hla][pos][pepLen][ref_mut] = [peptide, pepVarPos1, ic50]
 
-                            elif mut.split("-")[2].startswith("del"):
+                            elif "del" in mut.split("-")[2]:
                                 ## in frame deletion
                                 pepVarPos = float(varPos) - pos + 1
 
@@ -148,6 +148,9 @@ def parseClassI(filename):
                                     if pepLen not in resI[sample][ENST][mut][hla][pos]:
                                         resI[sample][ENST][mut][hla][pos][pepLen] = {}
                                     resI[sample][ENST][mut][hla][pos][pepLen][ref_mut] = [peptide, pepVarPos, ic50]
+
+                            else:
+                                sys.exit("Non-handled mutation type. Unexpected. {}".format(line))
 
 
 
