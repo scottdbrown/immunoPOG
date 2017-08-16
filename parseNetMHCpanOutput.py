@@ -69,6 +69,9 @@ def parseClassI(filename):
                     print("Line: {}".format(line))
                     sys.exit()
 
+                ## replace X in peptide with U
+                peptide = peptide.replace("X","U")
+
 
                 ## Look up identity.
                 ref_mut, ENST, mut, varPos, refProtSeq = pepInfo[identity]
