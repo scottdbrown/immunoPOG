@@ -452,6 +452,7 @@ if __name__ == "__main__":
                         print("Unknown variant type: {}".format(hgvs))
                         sys.exit()
 
+                    hugo = line[13]
                     pos = pos.split("_")
                     indelStartPos = int(pos[0])
                     
@@ -892,7 +893,7 @@ if __name__ == "__main__":
 
                                 ## Manually check the minimal peptide
                                 if DEBUG:
-                                    print("Reference minimal peptide:\t{}".format(refPeptide))
+                                    #print("Reference minimal peptide:\t{}".format(refPeptide))
                                     print("Mutant minimal peptide:\t\t{}".format(mutPeptide))
 
                                     input("Press enter to continue...")
